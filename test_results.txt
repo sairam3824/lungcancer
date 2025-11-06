@@ -1,0 +1,16 @@
+Lung Cancer Classification Results
+============================================================
+
+Malignant case (3).jpg: Bengin cases (69.11%)
+Normal case (15).jpg: Bengin cases (52.23%)
+result_Malignant case (4).png: Malignant cases (100.00%)
+Normal case (14).jpg: Bengin cases (59.45%)
+Malignant case (2).jpg: Bengin cases (65.49%)
+Normal case (13).jpg: Bengin cases (81.17%)
+Malignant case (5).jpg: Bengin cases (62.91%)
+Malignant case (4).jpg: Bengin cases (55.39%)
+Bengin case (3).jpg: Bengin cases (92.53%)
+Bengin case (2).jpg: Bengin cases (86.00%)
+result_Normal case (13).png: Malignant cases (100.00%)
+Normal case (16).jpg: Bengin cases (51.85%)
+Bengin case (4).jpg: Bengin cases (81.85%)
