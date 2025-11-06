@@ -92,25 +92,63 @@ def generate_gradcam(model, input_tensor, target_layer):
     
     return cam
 
-def detect_bounding_boxes(heatmap, threshold=0.5):
-    """Detect bounding boxes from heatmap"""
-    # Threshold the heatmap
-    binary = (heatmap > threshold).astype(np.uint8) * 255
+def detect_bounding_boxes(heatmap, threshold=0.7):
+    """Detect bounding boxes from heatmap with improved accuracy"""
+    # Apply Gaussian blur to smooth the heatmap
+    heatmap_smooth = cv2.GaussianBlur(heatmap, (5, 5), 0)
+    
+    # Threshold the heatmap with higher threshold for accuracy
+    binary = (heatmap_smooth > threshold).astype(np.uint8) * 255
+    
+    # Apply morphological operations to clean up the mask
+    kernel = np.ones((5, 5), np.uint8)
+    binary = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, kernel)
+    binary = cv2.morphologyEx(binary, cv2.MORPH_OPEN, kernel)
     
     # Find contours
     contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     
-    boxes = []
+    if not contours:
+        return []
+    
+    # Calculate area and intensity for each contour
+    box_scores = []
     for contour in contours:
         area = cv2.contourArea(contour)
-        if area > 100:  # Filter small regions
+        if area > 500:  # Filter small regions more aggressively
             x, y, w, h = cv2.boundingRect(contour)
-            boxes.append((x, y, w, h))
+            
+            # Calculate average intensity in this region
+            mask = np.zeros_like(heatmap)
+            cv2.drawContours(mask, [contour], -1, 1, -1)
+            avg_intensity = np.sum(heatmap * mask) / area
+            
+            # Score based on area and intensity
+            score = area * avg_intensity
+            box_scores.append((score, (x, y, w, h)))
     
-    return boxes
+    if not box_scores:
+        return []
+    
+    # Sort by score and take only the top box (most significant region)
+    box_scores.sort(reverse=True)
+    top_box = box_scores[0][1]
+    
+    # Add some padding to the box
+    x, y, w, h = top_box
+    padding = 10
+    x = max(0, x - padding)
+    y = max(0, y - padding)
+    w = min(224 - x, w + 2 * padding)
+    h = min(224 - y, h + 2 * padding)
+    
+    return [(x, y, w, h)]
 
 def draw_boxes_on_image(image, boxes, predicted_class):
     """Draw bounding boxes on image"""
+    if not boxes:
+        return image
+    
     draw = ImageDraw.Draw(image)
     
     # Choose color based on prediction
@@ -124,11 +162,14 @@ def draw_boxes_on_image(image, boxes, predicted_class):
         return image  # No boxes for normal cases
     
     for (x, y, w, h) in boxes:
-        # Draw rectangle
-        draw.rectangle([x, y, x+w, y+h], outline=box_color, width=3)
+        # Draw rectangle with thicker border
+        for i in range(4):
+            draw.rectangle([x-i, y-i, x+w+i, y+h+i], outline=box_color)
         
-        # Draw label
-        draw.text((x, y-15), label, fill=box_color)
+        # Draw label with background
+        label_bbox = draw.textbbox((x, y-20), label)
+        draw.rectangle(label_bbox, fill=box_color)
+        draw.text((x, y-20), label, fill='black')
     
     return image
 
@@ -159,8 +200,8 @@ def predict_image(image):
         # Generate heatmap
         heatmap = generate_gradcam(model, input_tensor, target_layer)
         
-        # Detect bounding boxes
-        boxes = detect_bounding_boxes(heatmap, threshold=0.6)
+        # Detect bounding boxes with higher threshold for accuracy
+        boxes = detect_bounding_boxes(heatmap, threshold=0.75)
         
         # Draw boxes on original image
         annotated_image = original_image.copy()
