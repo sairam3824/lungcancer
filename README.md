@@ -5,7 +5,7 @@ An AI-powered deep learning system for classifying lung cancer from medical imag
 ![Python](https://img.shields.io/badge/python-3.8+-blue.svg)
 ![PyTorch](https://img.shields.io/badge/PyTorch-2.0+-red.svg)
 ![Flask](https://img.shields.io/badge/Flask-2.3+-green.svg)
-![License](https://img.shields.io/badge/license-MIT-blue.svg)
+![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)
 
 ## ✨ Features
 
@@ -259,7 +259,7 @@ Contributions are welcome! Areas for improvement:
 
 ## 📝 License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
 
 ## 🙏 Acknowledgments
 
