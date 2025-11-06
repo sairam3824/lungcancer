@@ -6,6 +6,7 @@ A Flask-based web application for classifying lung cancer images using the train
 
 - 🖼️ Drag-and-drop or click to upload lung scan images
 - 🤖 Real-time AI-powered classification
+- 🎯 **Bounding box detection** - Automatically highlights cancer regions with colored boxes (red for malignant, yellow for benign)
 - 📊 Detailed probability breakdown for all classes
 - 🎨 Beautiful, responsive UI
 - ⚡ Fast predictions
@@ -68,7 +69,8 @@ Upload and classify an image
     "Benign cases": 0.15,
     "Malignant cases": 99.28,
     "Normal cases": 0.57
-  }
+  },
+  "annotated_image": "data:image/jpeg;base64,..."
 }
 ```
 

@@ -267,6 +267,7 @@
 
         <div class="preview-container" id="previewContainer">
             <img id="previewImage" class="preview-image" alt="Preview">
+            <img id="annotatedImage" class="preview-image" alt="Annotated" style="display: none;">
             
             <div class="result-container" id="resultContainer" style="display: none;">
                 <div class="result-title">Analysis Results</div>
@@ -404,6 +405,8 @@
         function displayResults(data) {
             const prediction = document.getElementById('prediction');
             const confidence = document.getElementById('confidence');
+            const annotatedImage = document.getElementById('annotatedImage');
+            const previewImage = document.getElementById('previewImage');
 
             prediction.textContent = data.predicted_class;
             confidence.textContent = `Confidence: ${data.confidence.toFixed(2)}%`;
@@ -416,6 +419,13 @@
                 prediction.classList.add('malignant');
             } else {
                 prediction.classList.add('normal');
+            }
+
+            // Show annotated image if available
+            if (data.annotated_image) {
+                annotatedImage.src = data.annotated_image;
+                annotatedImage.style.display = 'block';
+                previewImage.style.display = 'none';
             }
 
             // Update probability bars
@@ -448,6 +458,8 @@
             predictBtn.disabled = true;
             resetBtn.style.display = 'none';
             errorDiv.style.display = 'none';
+            document.getElementById('previewImage').style.display = 'block';
+            document.getElementById('annotatedImage').style.display = 'none';
         });
     </script>
 </body>
