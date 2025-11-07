@@ -16,7 +16,8 @@ import os
 import numpy as np
 import cv2
 
-# Import model architecture
+# Import model architectures
+from train_cspdarknet53 import CSPDarkNet53
 from run_lung_cancer_model import CSPDarkNetSmall
 
 app = Flask(__name__)
@@ -25,8 +26,16 @@ app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 # Device configuration
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-# Load model
-MODEL_PATH = 'best_lung_cancer_model.pth'
+# Load model - try CSPDarkNet53 first, fallback to old model
+import os as _os
+if _os.path.exists('cspdarknet53_best.pth'):
+    MODEL_PATH = 'cspdarknet53_best.pth'
+elif _os.path.exists('best_lung_cancer_model.pth'):
+    MODEL_PATH = 'best_lung_cancer_model.pth'
+    print("⚠️ Using old model file. Train CSPDarkNet53 for better results.")
+else:
+    MODEL_PATH = 'cspdarknet53_best.pth'  # Will error later with helpful message
+
 CLASS_NAMES = ['Benign cases', 'Malignant cases', 'Normal cases']
 
 model = None
@@ -35,10 +44,23 @@ def load_model():
     """Load the trained model"""
     global model
     if model is None:
-        model = CSPDarkNetSmall(num_classes=len(CLASS_NAMES)).to(device)
-        model.load_state_dict(torch.load(MODEL_PATH, map_location=device))
+        # Determine which model architecture to use based on file
+        if 'cspdarknet53' in MODEL_PATH.lower():
+            model = CSPDarkNet53(num_classes=len(CLASS_NAMES)).to(device)
+            checkpoint = torch.load(MODEL_PATH, map_location=device)
+            # Handle both direct state_dict and checkpoint format
+            if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
+                model.load_state_dict(checkpoint['model_state_dict'])
+            else:
+                model.load_state_dict(checkpoint)
+            print(f"✅ CSPDarkNet53 model loaded from {MODEL_PATH}")
+        else:
+            # Use old CSPDarkNetSmall architecture
+            model = CSPDarkNetSmall(num_classes=len(CLASS_NAMES)).to(device)
+            model.load_state_dict(torch.load(MODEL_PATH, map_location=device))
+            print(f"✅ CSPDarkNetSmall model loaded from {MODEL_PATH}")
+            print("⚠️ Using older model. Train CSPDarkNet53 for better results.")
         model.eval()
-        print(f"✅ Model loaded from {MODEL_PATH}")
     return model
 
 # Image preprocessing
@@ -194,8 +216,11 @@ def predict_image(image):
     # Generate Grad-CAM for malignant or benign cases
     annotated_image = None
     if 'Malignant' in predicted_class or 'Benign' in predicted_class:
-        # Get the last convolutional layer
-        target_layer = model.stage4.concat_conv.conv
+        # Get the last convolutional layer based on model type
+        if hasattr(model, 'stage5'):
+            target_layer = model.stage5.concat_conv.conv  # CSPDarkNet53
+        else:
+            target_layer = model.stage4.concat_conv.conv  # CSPDarkNetSmall
         
         # Generate heatmap
         heatmap = generate_gradcam(model, input_tensor, target_layer)
@@ -270,6 +295,9 @@ if __name__ == '__main__':
     # Check if model exists
     if not os.path.exists(MODEL_PATH):
         print(f"❌ Error: Model file '{MODEL_PATH}' not found!")
+        print("\n📝 To train the CSPDarkNet53 model, run:")
+        print("   python train_cspdarknet53.py")
+        print("\nMake sure you have the 'dataset' folder with your training images.")
         exit(1)
     
     # Load model on startup

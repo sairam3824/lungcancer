@@ -15,8 +15,8 @@ import seaborn as sns
 import numpy as np
 from tqdm import tqdm
 
-# Import model architecture from run_lung_cancer_model.py
-from run_lung_cancer_model import CSPDarkNetSmall
+# Import model architecture from train_cspdarknet53.py
+from train_cspdarknet53 import CSPDarkNet53
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}\n")
@@ -27,8 +27,13 @@ print(f"Using device: {device}\n")
 
 def load_model(model_path, num_classes=3):
     """Load the trained model"""
-    model = CSPDarkNetSmall(num_classes=num_classes).to(device)
-    model.load_state_dict(torch.load(model_path, map_location=device))
+    model = CSPDarkNet53(num_classes=num_classes).to(device)
+    checkpoint = torch.load(model_path, map_location=device)
+    # Handle both direct state_dict and checkpoint format
+    if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
+        model.load_state_dict(checkpoint['model_state_dict'])
+    else:
+        model.load_state_dict(checkpoint)
     model.eval()
     return model
 
@@ -173,10 +178,14 @@ if __name__ == "__main__":
     print("=" * 70)
     
     # Check if model exists
-    model_path = 'best_lung_cancer_model.pth'
+    model_path = 'cspdarknet53_best.pth'
     if not os.path.exists(model_path):
         print(f"❌ Error: Model file '{model_path}' not found!")
-        exit(1)
+        print("   Trying alternative path 'best_lung_cancer_model.pth'...")
+        model_path = 'best_lung_cancer_model.pth'
+        if not os.path.exists(model_path):
+            print(f"❌ Error: Model file not found!")
+            exit(1)
     
     # Check if dataset exists
     data_dir = 'dataset'
