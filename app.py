@@ -4,7 +4,8 @@ Lung Cancer Classification Web App
 Upload images and get predictions with confidence scores
 """
 
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, redirect, url_for, flash
+from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -16,26 +17,29 @@ import os
 import numpy as np
 import cv2
 
-# Import model architectures
-from train_cspdarknet53 import CSPDarkNet53
+# Import model architecture
 from run_lung_cancer_model import CSPDarkNetSmall
+# Import authentication
+from auth import init_db, create_user, verify_user, get_user_by_id
 
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
+app.config['SECRET_KEY'] = 'your-secret-key-change-in-production'
+
+# Initialize Flask-Login
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = 'login'
+
+@login_manager.user_loader
+def load_user(user_id):
+    return get_user_by_id(int(user_id))
 
 # Device configuration
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-# Load model - try CSPDarkNet53 first, fallback to old model
-import os as _os
-if _os.path.exists('cspdarknet53_best.pth'):
-    MODEL_PATH = 'cspdarknet53_best.pth'
-elif _os.path.exists('best_lung_cancer_model.pth'):
-    MODEL_PATH = 'best_lung_cancer_model.pth'
-    print("⚠️ Using old model file. Train CSPDarkNet53 for better results.")
-else:
-    MODEL_PATH = 'cspdarknet53_best.pth'  # Will error later with helpful message
-
+# Load model
+MODEL_PATH = 'best_lung_cancer_model.pth'
 CLASS_NAMES = ['Benign cases', 'Malignant cases', 'Normal cases']
 
 model = None
@@ -44,23 +48,15 @@ def load_model():
     """Load the trained model"""
     global model
     if model is None:
-        # Determine which model architecture to use based on file
-        if 'cspdarknet53' in MODEL_PATH.lower():
-            model = CSPDarkNet53(num_classes=len(CLASS_NAMES)).to(device)
-            checkpoint = torch.load(MODEL_PATH, map_location=device)
-            # Handle both direct state_dict and checkpoint format
-            if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
-                model.load_state_dict(checkpoint['model_state_dict'])
-            else:
-                model.load_state_dict(checkpoint)
-            print(f"✅ CSPDarkNet53 model loaded from {MODEL_PATH}")
+        model = CSPDarkNetSmall(num_classes=len(CLASS_NAMES)).to(device)
+        checkpoint = torch.load(MODEL_PATH, map_location=device, weights_only=False)
+        # Handle both checkpoint format and direct state_dict format
+        if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
+            model.load_state_dict(checkpoint['model_state_dict'])
         else:
-            # Use old CSPDarkNetSmall architecture
-            model = CSPDarkNetSmall(num_classes=len(CLASS_NAMES)).to(device)
-            model.load_state_dict(torch.load(MODEL_PATH, map_location=device))
-            print(f"✅ CSPDarkNetSmall model loaded from {MODEL_PATH}")
-            print("⚠️ Using older model. Train CSPDarkNet53 for better results.")
+            model.load_state_dict(checkpoint)
         model.eval()
+        print(f" Model loaded from {MODEL_PATH}")
     return model
 
 # Image preprocessing
@@ -216,11 +212,8 @@ def predict_image(image):
     # Generate Grad-CAM for malignant or benign cases
     annotated_image = None
     if 'Malignant' in predicted_class or 'Benign' in predicted_class:
-        # Get the last convolutional layer based on model type
-        if hasattr(model, 'stage5'):
-            target_layer = model.stage5.concat_conv.conv  # CSPDarkNet53
-        else:
-            target_layer = model.stage4.concat_conv.conv  # CSPDarkNetSmall
+        # Get the last convolutional layer
+        target_layer = model.stage4.concat_conv.conv
         
         # Generate heatmap
         heatmap = generate_gradcam(model, input_tensor, target_layer)
@@ -244,11 +237,64 @@ def predict_image(image):
     }
 
 @app.route('/')
+@login_required
 def index():
     """Render main page"""
-    return render_template('index.html')
+    return render_template('index.html', username=current_user.username)
+
+@app.route('/signup', methods=['GET', 'POST'])
+def signup():
+    """Handle user registration"""
+    if current_user.is_authenticated:
+        return redirect(url_for('index'))
+    
+    if request.method == 'POST':
+        username = request.form.get('username')
+        email = request.form.get('email')
+        password = request.form.get('password')
+        confirm_password = request.form.get('confirm_password')
+        
+        if password != confirm_password:
+            return render_template('signup.html', error='Passwords do not match')
+        
+        success, message = create_user(username, email, password)
+        if success:
+            return redirect(url_for('login', success='Account created successfully! Please sign in.'))
+        else:
+            return render_template('signup.html', error=message)
+    
+    return render_template('signup.html')
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    """Handle user login"""
+    if current_user.is_authenticated:
+        return redirect(url_for('index'))
+    
+    success_msg = request.args.get('success')
+    
+    if request.method == 'POST':
+        username = request.form.get('username')
+        password = request.form.get('password')
+        
+        user = verify_user(username, password)
+        if user:
+            login_user(user)
+            return redirect(url_for('index'))
+        else:
+            return render_template('login.html', error='Invalid username or password')
+    
+    return render_template('login.html', success=success_msg)
+
+@app.route('/logout')
+@login_required
+def logout():
+    """Handle user logout"""
+    logout_user()
+    return redirect(url_for('login'))
 
 @app.route('/predict', methods=['POST'])
+@login_required
 def predict():
     """Handle image upload and prediction"""
     if 'file' not in request.files:
@@ -292,25 +338,25 @@ def health():
     return jsonify({'status': 'healthy', 'model_loaded': model is not None})
 
 if __name__ == '__main__':
+    # Initialize database
+    init_db()
+    
     # Check if model exists
     if not os.path.exists(MODEL_PATH):
-        print(f"❌ Error: Model file '{MODEL_PATH}' not found!")
-        print("\n📝 To train the CSPDarkNet53 model, run:")
-        print("   python train_cspdarknet53.py")
-        print("\nMake sure you have the 'dataset' folder with your training images.")
+        print(f" Error: Model file '{MODEL_PATH}' not found!")
         exit(1)
     
     # Load model on startup
     load_model()
     
     print("\n" + "=" * 60)
-    print("🫁 Lung Cancer Classification Web App")
+    print(" Lung Cancer Classification Web App")
     print("=" * 60)
-    print(f"✅ Model loaded successfully")
-    print(f"✅ Classes: {CLASS_NAMES}")
-    print(f"✅ Device: {device}")
-    print("\n🌐 Starting server...")
-    print("📱 Open http://localhost:5001 in your browser")
+    print(f" Model loaded successfully")
+    print(f" Classes: {CLASS_NAMES}")
+    print(f" Device: {device}")
+    print("\n Starting server...")
+    print(" Open http://localhost:5001 in your browser")
     print("=" * 60 + "\n")
     
     app.run(debug=True, host='0.0.0.0', port=5001)

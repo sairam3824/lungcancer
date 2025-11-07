@@ -60,5 +60,8 @@ cspdarknet53_results/
 instance/
 .webassets-cache
 
+# Database
+users.db
+
 # Environment variables
 .env
