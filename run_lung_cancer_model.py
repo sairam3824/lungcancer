@@ -85,6 +85,30 @@ class CSPDarkNetSmall(nn.Module):
         x = self.fc(x)
         return x
 
+class CSPDarkNet53(nn.Module):
+    def __init__(self, num_classes=3):
+        super(CSPDarkNet53, self).__init__()
+        self.conv1 = ConvBlock(3, 32, 3)
+        self.stage1 = CSPBlock(32, 64, num_blocks=1)
+        self.stage2 = CSPBlock(64, 128, num_blocks=2)
+        self.stage3 = CSPBlock(128, 256, num_blocks=8)
+        self.stage4 = CSPBlock(256, 512, num_blocks=8)
+        self.stage5 = CSPBlock(512, 1024, num_blocks=4)
+        self.global_pool = nn.AdaptiveAvgPool2d(1)
+        self.fc = nn.Linear(1024, num_classes)
+
+    def forward(self, x):
+        x = self.conv1(x)
+        x = self.stage1(x)
+        x = self.stage2(x)
+        x = self.stage3(x)
+        x = self.stage4(x)
+        x = self.stage5(x)
+        x = self.global_pool(x)
+        x = x.view(x.size(0), -1)
+        x = self.fc(x)
+        return x
+
 # ============================================================
 # Data Loading
 # ============================================================
@@ -239,8 +263,8 @@ if __name__ == "__main__":
     
     # Initialize model
     num_classes = len(train_data.classes)
-    model = CSPDarkNetSmall(num_classes=num_classes).to(device)
-    print(f"\n✅ CSPDarkNetSmall model created for {num_classes} classes")
+    model = CSPDarkNet53(num_classes=num_classes).to(device)
+    print(f"\n✅ CSPDarkNet53 model created for {num_classes} classes")
     
     # Train model
     print("\n🚀 Starting training...")

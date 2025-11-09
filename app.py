@@ -18,7 +18,7 @@ import numpy as np
 import cv2
 
 # Import model architecture
-from run_lung_cancer_model import CSPDarkNetSmall
+from run_lung_cancer_model import CSPDarkNet53
 # Import authentication
 from auth import init_db, create_user, verify_user, get_user_by_id
 
@@ -39,7 +39,7 @@ def load_user(user_id):
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Load model
-MODEL_PATH = 'best_lung_cancer_model.pth'
+MODEL_PATH = 'cspdarknet53_best.pth'
 CLASS_NAMES = ['Benign cases', 'Malignant cases', 'Normal cases']
 
 model = None
@@ -48,7 +48,7 @@ def load_model():
     """Load the trained model"""
     global model
     if model is None:
-        model = CSPDarkNetSmall(num_classes=len(CLASS_NAMES)).to(device)
+        model = CSPDarkNet53(num_classes=len(CLASS_NAMES)).to(device)
         checkpoint = torch.load(MODEL_PATH, map_location=device, weights_only=False)
         # Handle both checkpoint format and direct state_dict format
         if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
@@ -213,7 +213,7 @@ def predict_image(image):
     annotated_image = None
     if 'Malignant' in predicted_class or 'Benign' in predicted_class:
         # Get the last convolutional layer
-        target_layer = model.stage4.concat_conv.conv
+        target_layer = model.stage5.concat_conv.conv
         
         # Generate heatmap
         heatmap = generate_gradcam(model, input_tensor, target_layer)
